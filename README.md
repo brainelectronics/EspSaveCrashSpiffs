@@ -90,9 +90,9 @@ Check the examples folder for sample implementation of this library and tracking
 
 ## Examples
 
-Library comes with [example sketches](https://github.com/krzychb/EspSaveCrash/tree/master/examples) that let you trigger some exceptions and see how to visualize saved data.
+Library comes with [example sketches](https://github.com/brainelectronics/EspSaveCrashSpiffs/tree/master/examples) that let you trigger some exceptions and see how to visualize saved data.
 
-Please check separate section [how to use example sketches](examples.md) and what particular functionality they provide.
+<!-- Please check separate section [how to use example sketches](examples.md) and what particular functionality they provide. -->
 
 
 ## Tested With
@@ -106,14 +106,14 @@ Please check separate section [how to use example sketches](examples.md) and wha
 ### Programming Environment
 
 * [Arduino IDE](https://www.arduino.cc/en/Main/Software) 1.6.9 portable version running on Windows 7 x64
+* [Arduino IDE](https://www.arduino.cc/en/Main/Software) 1.8.9 portable version running on Mac OS X
 * [PlatformIO IDE](http://platformio.org/platformio-ide) 1.3.0 CLI 2.11.0 running on Windows 7 x64
-* [Visual Micro](http://www.visualmicro.com/) 1606.17.10 with Visual Studio Community 2015 running on Windows 7 x64
 
 
 ## Installation
 
 * Arduino IDE - use [Library Manager](https://www.arduino.cc/en/Guide/Libraries#toc2) in Arduino IDE and search for *EspSaveCrash*.
-* PlatformIO IDE - use PlatformIO's [Library Manager](http://docs.platformio.org/en/stable/librarymanager/). In particular execute `pio lib install 376`.
+<!-- * PlatformIO IDE - use PlatformIO's [Library Manager](http://docs.platformio.org/en/stable/librarymanager/). In particular execute `pio lib install 376`. -->
 * Visual Micro - installation procedure is the same as for Arduino IDE above.
 
 
