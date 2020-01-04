@@ -1,0 +1,24 @@
+###########################################
+# Syntax Coloring Map For EspSaveCrashSpiffs
+###########################################
+
+###########################################
+# Datatypes (KEYWORD1)
+###########################################
+
+EspSaveCrashSpiffs	KEYWORD1
+
+###########################################
+# Methods and Functions (KEYWORD2)
+###########################################
+
+removeFile	KEYWORD2
+readFileToBuffer	KEYWORD2
+print   KEYWORD2
+count 	KEYWORD2
+checkFreeSpace	KEYWORD2
+getFreeSpace	KEYWORD2
+getLogFileName	KEYWORD2
+getLastLogFileName	KEYWORD2
+checkFile	KEYWORD2
+setLogFileName	KEYWORD2
