@@ -88,6 +88,9 @@ class EspSaveCrashSpiffs
     bool readFileToBuffer(const char* fileName, char* userBuffer);
     bool print(const char* fileName, Print& outDevice = Serial);
     uint32_t count(char *dirName, char *pattern);
+    uint32_t getNumberOfFiles(char* dirName);
+    uint32_t getLongestFileName(char* dirName);
+    void getFileList(char* dirName, char** ppcGivenArray, uint8_t ubNumberOfFiles);
     bool checkFreeSpace(const uint32_t ulFileSize);
     uint32_t getFreeSpace();
     const char *getLogFileName();

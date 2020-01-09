@@ -789,7 +789,7 @@ bool EspSaveCrashSpiffs::print(const char* fileName, Print& outputDev)
  *
  * @return     Number of files matching the pattern
  */
-uint32_t EspSaveCrashSpiffs::count(char *dirName, char *pattern)
+uint32_t EspSaveCrashSpiffs::count(char* dirName, char* pattern)
 {
   // if no directory name is given
   if (!dirName)
@@ -819,6 +819,103 @@ uint32_t EspSaveCrashSpiffs::count(char *dirName, char *pattern)
   }
 
   return ulCrashCounter;
+}
+
+/**
+ * @brief      Gets the total number of files in this directory.
+ *
+ * @param      dirName  The directory name
+ *
+ * @return     The number of files.
+ */
+uint32_t EspSaveCrashSpiffs::getNumberOfFiles(char* dirName)
+{
+  // if no directory name is given
+  if (!dirName)
+  {
+    // take the default root directory
+    dirName = (char*)"/";
+  }
+
+  // search for files in the log directory
+  Dir thisDirectory = SPIFFS.openDir(dirName);
+
+  uint32_t ulFileCounter = 0;
+
+  while (thisDirectory.next())
+  {
+    ulFileCounter++;
+  }
+
+  return ulFileCounter;
+}
+
+/**
+ * @brief      Gets the longest file name.
+ *
+ * @param      dirName  The directory name
+ *
+ * @return     The longest file name as integer.
+ */
+uint32_t EspSaveCrashSpiffs::getLongestFileName(char* dirName)
+{
+  // if no directory name is given
+  if (!dirName)
+  {
+    // take the default root directory
+    dirName = (char*)"/";
+  }
+
+  // search for files in the log directory
+  Dir thisDirectory = SPIFFS.openDir(dirName);
+
+  uint8_t ubLongestFilename = 0;
+
+  while (thisDirectory.next())
+  {
+    uint8_t _thisFilenameLength = strlen(thisDirectory.fileName().c_str());
+
+    if (_thisFilenameLength > ubLongestFilename)
+    {
+      ubLongestFilename = _thisFilenameLength;
+    }
+  }
+
+  return ubLongestFilename;
+}
+
+/**
+ * @brief      Create a list of files.
+ *
+ * @param      dirName          The directory name
+ * @param      ppcGivenArray    Array to store the filenames to
+ * @param[in]  ubNumberOfFiles  The number of files
+ */
+void EspSaveCrashSpiffs::getFileList(char* dirName, char** ppcGivenArray, uint8_t ubNumberOfFiles)
+{
+  // if no directory name is given
+  if (!dirName)
+  {
+    // take the default root directory
+    dirName = (char*)"/";
+  }
+
+  // search for files in the log directory
+  Dir thisDirectory = SPIFFS.openDir(dirName);
+
+  uint8_t i = 0;
+  while (thisDirectory.next())
+  {
+    sprintf(ppcGivenArray[i], "%s", thisDirectory.fileName().c_str());
+
+    i++;
+
+    // break if more files are available than space in array
+    if (i > ubNumberOfFiles)
+    {
+      break;
+    }
+  }
 }
 
 /**
