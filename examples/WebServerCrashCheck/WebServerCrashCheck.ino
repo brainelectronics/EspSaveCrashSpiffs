@@ -5,8 +5,8 @@
 
   Repository: https://github.com/brainelectronics/EspSaveCrashSpiffs
   File: WebServerCrashCheck.ino
-  Revision: 0.1.0
-  Date: 04-Jan-2020
+  Revision: 0.1.1
+  Date: 09-Jan-2020
   Author: brainelectronics
 
   based on code of
@@ -43,14 +43,13 @@ extern "C" {
 // include Arduino libs
 #include <FS.h>
 #include <ESP8266WiFi.h>
-#include <ESP8266WiFi.h>
 #include <ESP8266WiFiMulti.h>
 #include <WiFiClient.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
 
 // WiFi ssid and password defined in wifiConfig.h
-// file is tracked with gitignore
+// file might be tracked with gitignore
 #include "wifiConfig.h"
 
 // use the default file name defined in EspSaveCrashSpiffs.h
@@ -80,15 +79,15 @@ void setup(void)
 
   // credentials will be added to onboard WiFi settings
   WiFiMulti.addAP(ssid, password);
-  // you have to wait until WiFi.status() == WL_CONNECTED
-  // before starting MDNS and the webserver
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED)
-  {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println(" connected");
+  // // you have to wait until WiFi.status() == WL_CONNECTED
+  // // before starting MDNS and the webserver
+  // WiFi.begin(ssid, password);
+  // while (WiFi.status() != WL_CONNECTED)
+  // {
+  //   delay(500);
+  //   Serial.print(".");
+  // }
+  // Serial.println(" connected");
 
   // create AccessPoint with custom network name and password
   WiFi.softAP(accessPointSsid, accessPointPassword);
@@ -96,6 +95,8 @@ void setup(void)
 
   server.on("/", handleRoot);
   server.on("/log", handleLog);
+  server.on("/list", handleListFiles);
+  server.on("/file", handleFilePath);
   server.onNotFound(handleNotFound);
 
   // start the http server
@@ -123,14 +124,19 @@ void loop(void)
       // change the flag
       performOnce = 1;
 
+      Serial.printf("Connected to '%s' as '%s' \n", ssid, WiFi.localIP().toString().c_str());
+
+      // try to start MDNS service
       if (MDNS.begin("esp8266"))
       {
         MDNS.addService("http", "tcp", 80);
 
-        Serial.println("MDNS responder started");
+        Serial.println("MDNS service started. This device is also available as 'esp8266.local' in a web browser");
       }
-
-      Serial.printf("Connected to '%s'. Open '%s' or 'esp8266.local' in a web browser\n", ssid, WiFi.localIP().toString().c_str());
+      else
+      {
+        Serial.println("MDNS service failed to start.");
+      }
     }
   }
 
@@ -227,8 +233,17 @@ void printLogToBuffer()
   }
   else
   {
+    // in case not enough RAM is available to calloc the whole file size
+    char* _errorContent = (char*)calloc(255, sizeof(char));
+
     // print error message in case of not enought RAM for this file
-    Serial.printf("Error reading file '%s' to buffer. %d byte of RAM is not enough to read %d byte of file content", _lastCrashFileName, _ulFreeHeap, _crashFileSize);
+    sprintf(_errorContent, "Error reading file '%s' to buffer. %d byte of RAM is not enough to read %d byte of file content", _lastCrashFileName, _ulFreeHeap, _crashFileSize);
+
+    // print error message in case of not enought RAM
+    Serial.println(_errorContent);
+
+    // free the allocated space
+    free(_errorContent);
   }
 
   // free the allocated space
@@ -257,11 +272,17 @@ void printLogToSerial()
   free(_lastCrashFileName);
 }
 
+/**
+ * @brief      Handle access on root page
+ */
 void handleRoot()
 {
-  server.send(200, "text/html", "<html><body>Hello from ESP<br><a href='/log'>Latest crash Log</a></body></html>");
+  server.send(200, "text/html", "<html><body>Hello from ESP<br><a href='/log' target='_blank'>Latest crash Log</a><br><a href='/list' target='_blank'>List all files in root directory</a><br><a href='/file?path=/crashLog-2.log' target='_blank'>Crash Log file #2</a><br></body></html>");
 }
 
+/**
+ * @brief      Handle access on log page
+ */
 void handleLog()
 {
   // allocate some space for the filename
@@ -291,6 +312,7 @@ void handleLog()
     // read the file content to the buffer
     SaveCrashSpiffs.readFileToBuffer(_lastCrashFileName, _crashFileContent);
 
+    // send as text/plain to avoid problems with '<<<' signs
     server.send(200, "text/plain", _crashFileContent);
 
     // free the allocated space
@@ -298,20 +320,253 @@ void handleLog()
   }
   else
   {
-    char* _debugOutputBuffer = (char *) calloc(255, sizeof(char));
+    char* _errorContent = (char *) calloc(255, sizeof(char));
 
     // print error message in case of not enought RAM for this file
-    sprintf(_debugOutputBuffer, "507: Insufficient Storage. Error reading file '%s' to buffer. %d byte of RAM is not enough to read %d byte of file content", _lastCrashFileName, _ulFreeHeap, _crashFileSize);
-    server.send(507, "text/plain", _debugOutputBuffer);
+    sprintf(_errorContent, "507: Insufficient Storage. Error reading file '%s' to buffer. %d byte of RAM is not enough to read %d byte of file content", _lastCrashFileName, _ulFreeHeap, _crashFileSize);
+    server.send(507, "text/plain", _errorContent);
 
     // free the allocated space
-    free(_debugOutputBuffer);
+    free(_errorContent);
   }
 
   // free the allocated space
   free(_lastCrashFileName);
 }
 
+/**
+ * @brief      Handle given filepath with URL
+ */
+void handleFilePath()
+{
+  // if parameter is empty
+  if (server.arg("path") == "")
+  {
+    server.send(404, "text/plain", "Path argument not found");
+  }
+  else
+  {
+    // allocate some space for the filename
+    char* _fileName = (char*)calloc(255, sizeof(char));
+
+    // put the value of the path to _fileName
+    // e.g. http://192.168.4.1/file?path=/crashLog-5.log
+    // will sprinf '/crashLog-5.log' to _fileName
+    sprintf(_fileName, "%s", server.arg("path").c_str());
+
+    // open the file in reading mode
+    File theFile = SPIFFS.open(_fileName, "r");
+
+    // if this file exists
+    if (theFile)
+    {
+      // get the size of the file and close it
+      size_t _fileSize = theFile.size();
+      theFile.close();
+
+      // get free heap/RAM of the system
+      uint32_t _ulFreeHeap = system_get_free_heap_size();
+
+      // check if file size is smaller than available RAM
+      if (_ulFreeHeap > (_fileSize+1))
+      {
+        // create buffer for file content with the size of the file+1
+        char* _fileContent = (char*)calloc(_fileSize+1, sizeof(char));
+
+        // read the file content to the buffer
+        SaveCrashSpiffs.readFileToBuffer(_fileName, _fileContent);
+
+        uint32_t _pageContentSize = 255 + _fileSize;
+        char* pageContent = (char*)calloc(_pageContentSize, sizeof(char));
+
+        sprintf(pageContent, "Content of file '%s' of size %d byte\n\n%s", _fileName, _fileSize, _fileContent);
+
+        // send as text/plain to avoid problems with '<<<' signs
+        server.send(200, "text/plain", pageContent);
+
+        // free the allocated space for page content and file name
+        free(_fileContent);
+        free(pageContent);
+      }
+      else
+      {
+        // in case not enough RAM is available to calloc the whole file size
+        char* _errorContent = (char*)calloc(255, sizeof(char));
+
+        // print error message in case of not enought RAM for this file
+        sprintf(_errorContent, "Error reading file '%s' to buffer. %d byte of RAM is not enough to read %d byte of file content", _fileName, _ulFreeHeap, _fileSize);
+
+        server.send(507, "text/plain", _errorContent);
+
+        // free the allocated space
+        free(_errorContent);
+      }
+    }
+    else
+    {
+      // if 'file' does not exist or given argument is not a filepath or so on
+      char* _errorContent = (char*)calloc(255, sizeof(char));
+
+      // print error message in case of not enought RAM for this file
+      sprintf(_errorContent, "404<br>Error reading file '%s'.<br>This file does not exist", _fileName);
+
+      server.send(404, "text/html", _errorContent);
+
+      // free the allocated space
+      free(_errorContent);
+    }
+
+    // free the allocated space
+    free(_fileName);
+  }
+}
+
+/**
+ * @brief      Handle access to filelist webpage
+ *
+ * Show a list of files with their size on the page
+ */
+void handleListFiles()
+{
+  uint8_t i;
+
+  // allocate some space for the filename
+  char* theDirectory = (char*)calloc(255, sizeof(char));
+
+  // if parameter is empty
+  if (server.arg("path") == "")
+  {
+    strcpy(theDirectory, "/");
+  }
+  else
+  {
+    // put the value of the path to theDirectory
+    // e.g. http://192.168.4.1/list?path=/
+    // will sprinf '/crashLog-5.log' to theDirectory
+    sprintf(theDirectory, "%s", server.arg("path").c_str());
+
+    // try to open that directory in reading mode
+    File file = SPIFFS.open(theDirectory, "r");
+
+    // if the specified directory is valid
+    if(file.isDirectory())
+    {
+      // pass
+      file.close();
+    }
+    else
+    {
+      // use the root directory
+      strcpy(theDirectory, "/");
+    }
+  }
+
+  // count total number of files in specified directory
+  uint8_t ubNumberOfFiles = SaveCrashSpiffs.getNumberOfFiles(theDirectory);
+
+  // find number of chars of longest filename to allocate as less as needed
+  uint8_t ubLongestFileName = SaveCrashSpiffs.getLongestFileName(theDirectory);
+
+  // create array for file names
+  char* pcFileList[ubNumberOfFiles];
+
+  // get free heap/RAM of the system
+  uint32_t _ulFreeHeap = system_get_free_heap_size();
+
+  // calculate required heap
+  uint32_t _ulRequiredHeap = ((ubLongestFileName * sizeof(char)) + 255) * ubNumberOfFiles + 100;
+
+  // check if file size is smaller than available RAM
+  if (_ulFreeHeap > (_ulRequiredHeap+1))
+  {
+    // allocate space for the file list
+    for (i = 0; i < ubNumberOfFiles; i++)
+    {
+      pcFileList[i] = (char*)calloc(ubLongestFileName, sizeof(char));
+
+      /*
+      // this will not fail as we checked free heap a priori
+      // try to allocate space
+      if ((pcFileList[i] = (char*)calloc(ubLongestFileName, sizeof(char))) == NULL)
+      {
+        // if it failes
+        Serial.printf("Unable to allocate any more memory. Only space for %d/%d \n", i, ubNumberOfFiles);
+
+        // work with most possible number of files
+        ubNumberOfFiles = i-1;
+
+        break;
+      }
+      */
+    }
+
+    // pointer to file list/array
+    char** ppcFileList = pcFileList;
+
+    // get the file list of theDirectory to buffer ppcFileList
+    SaveCrashSpiffs.getFileList(theDirectory, ppcFileList, ubNumberOfFiles);
+
+    // calculate maximum required space per line of list
+    uint16_t lineSpace = ubLongestFileName + 255;
+    char* fileLine = (char*)calloc(lineSpace, sizeof(char));
+
+    // calculate maximum needed space of whole page
+    uint32_t siteSpace = 100 + (lineSpace*ubNumberOfFiles);
+    char* filePage = (char*)calloc(siteSpace, sizeof(char));
+
+    // copy the header to the filePage variable
+    strcpy(filePage, "<html><body>List of crash logs<br>");
+
+    // Serial.printf("List of files in directory '%s'\n", theDirectory);
+    for (i = 0; i < ubNumberOfFiles; i++)
+    {
+      // open this file in reading mode
+      File theFile = SPIFFS.open(ppcFileList[i], "r");
+
+      // sprintf required infos to the fileLine variable
+      sprintf(fileLine, "%d byte <a href='/file?path=%s' target='_blank'>%s</a><br>", theFile.size(), ppcFileList[i], ppcFileList[i]);
+
+      // close file finally
+      theFile.close();
+
+      // append this line to the page buffer
+      strcat(filePage, fileLine);
+    }
+
+    // append the footer to the filePage variable
+    strcat(filePage, "</body></html>");
+
+    // serve the page
+    server.send(200, "text/html", filePage);
+
+    // file list should be free'd at the end
+    for (i = 0; i < ubNumberOfFiles; i++)
+    {
+      free(pcFileList[i]);
+    }
+
+    // free the allocated space
+    free(fileLine);
+    free(filePage);
+  }
+  else
+  {
+    // in case not enough RAM is available to calloc the whole file size
+    char* _errorContent = (char*)calloc(255, sizeof(char));
+
+    // print error message in case of not enought RAM for this file
+    sprintf(_errorContent, "Error reading file list to buffer. %d byte of RAM is not enough to read %d byte of file list content", _ulFreeHeap, _ulRequiredHeap);
+
+    server.send(507, "text/plain", _errorContent);
+
+    // free the allocated space
+    free(_errorContent);
+  }
+}
+
+/**
+ * @brief      Provide 404 Not found page
+ */
 void handleNotFound()
 {
   String message = "File Not Found\n\n";
@@ -326,5 +581,6 @@ void handleNotFound()
   {
     message += " " + server.argName(i) + ": " + server.arg(i) + "\n";
   }
+
   server.send(404, "text/plain", message);
 }
