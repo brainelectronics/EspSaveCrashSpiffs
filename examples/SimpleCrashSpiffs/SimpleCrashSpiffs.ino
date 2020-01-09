@@ -5,8 +5,8 @@
 
   Repository: https://github.com/brainelectronics/EspSaveCrashSpiffs
   File: SimpleCrashSpiffs.ino
-  Revision: 0.1.0
-  Date: 04-Jan-2020
+  Revision: 0.1.1
+  Date: 09-Jan-2020
   Author: brainelectronics
 
   based on code of
@@ -95,8 +95,6 @@ void loop(void)
     String _readString = Serial.readString();
 
     // clear the memory before copy of new stuff
-    // memset(_serialReadContent, 0, sizeof(char));
-    // memcpy(_serialReadContent, _readString.c_str(), strlen(_readString.c_str())-1);
     sprintf(_serialReadContent, "%s", _readString.c_str());
 
     // Serial.printf("Received: '%s' of length %d\n", _serialReadContent, strlen(_serialReadContent));
@@ -159,6 +157,10 @@ void loop(void)
             // print the directory informations
             printDirectoryInfo();
             break;
+          case 103: // 'g'
+            // print the list of files
+            printFileList();
+            break;
           case 104: // 'h'
             // print the help menu
             printHelp();
@@ -205,6 +207,7 @@ void printHelp()
   Serial.printf("d : remove default crash info file '%s'\n", SaveCrashSpiffs.getLogFileName());
   Serial.printf("d123 : remove file number '123' of the directory '/'\n");
   Serial.println("f : print all filenames and their size");
+  Serial.println("g : print all filenames as list");
   Serial.println("h : print this help menu");
   Serial.println("i : print info of filesystem");
   Serial.println("l : print filename of latest crash log");
@@ -303,8 +306,8 @@ void printLastCrashLogName()
 void printFilesystemInfo()
 {
   Serial.printf("Remaining space on SPIFFS: %d byte\n", SaveCrashSpiffs.getFreeSpace());
-  Serial.printf("Will 1024 byte fit to SPIFFS? %s\n", SaveCrashSpiffs.checkFreeSpace(1024) ? "True" : "False");
-  Serial.printf("Will 4MB (4194394 byte) fit to SPIFFS? %s\n", SaveCrashSpiffs.checkFreeSpace(4194394) ? "True" : "False");
+  Serial.printf("Will additional 1024 byte fit to SPIFFS? %s\n", SaveCrashSpiffs.checkFreeSpace(1024) ? "True" : "False");
+  Serial.printf("Will additional 4MB (4194394 byte) fit to SPIFFS? %s\n", SaveCrashSpiffs.checkFreeSpace(4194394) ? "True" : "False");
 }
 
 /**
@@ -314,8 +317,10 @@ void countNumberOfFiles()
 {
   // find numbers of '.log' files in directory '/'
   uint32_t ulNumberOfFiles = SaveCrashSpiffs.count((char*)"/", (char*)".log");
-
   Serial.printf("Found %d files in directory '/' ending with '.log'\n", ulNumberOfFiles);
+
+  // uint32_t ubNumberOfFiles = SaveCrashSpiffs.getNumberOfFiles((char*)"/");
+  // Serial.printf("Found %d files in directory '/'\n", ulNumberOfFiles);
 }
 
 /**
@@ -363,12 +368,99 @@ void printLogToBuffer()
   }
   else
   {
+    // in case not enough RAM is available to calloc the whole file size
+    char* _errorContent = (char*)calloc(255, sizeof(char));
+
     // print error message in case of not enought RAM for this file
-    Serial.printf("Error reading file '%s' to buffer. %d byte of RAM is not enough to read %d byte of file content", _lastCrashFileName, _ulFreeHeap, _crashFileSize);
+    sprintf(_errorContent, "Error reading file '%s' to buffer. %d byte of RAM is not enough to read %d byte of file content", _lastCrashFileName, _ulFreeHeap, _crashFileSize);
+
+    // print error message in case of not enought RAM
+    Serial.println(_errorContent);
+
+    // free the allocated space
+    free(_errorContent);
   }
 
   // free the allocated space
   free(_lastCrashFileName);
+}
+
+void printFileList()
+{
+  uint8_t i;
+  char* theDirectory = (char*)"/";
+
+  // count total number of files in specified directory
+  uint8_t ubNumberOfFiles = SaveCrashSpiffs.getNumberOfFiles(theDirectory);
+
+  // find number of chars of longest filename to allocate as less as needed
+  uint8_t ubLongestFileName = SaveCrashSpiffs.getLongestFileName(theDirectory);
+
+  // create array for file names
+  char* pcFileList[ubNumberOfFiles];
+
+  // get free heap/RAM of the system
+  uint32_t _ulFreeHeap = system_get_free_heap_size();
+
+  // calculate required heap
+  uint32_t _ulRequiredHeap = (ubLongestFileName * sizeof(char))* ubNumberOfFiles;
+
+  // check if file size is smaller than available RAM
+  if (_ulFreeHeap > (_ulRequiredHeap+1))
+  {
+    // allocate space for the file list
+    for (i = 0; i < ubNumberOfFiles; i++)
+    {
+      pcFileList[i] = (char*)calloc(ubLongestFileName, sizeof(char));
+
+      /*
+      // this will not fail as we checked free heap a priori
+      // try to allocate space
+      if ((pcFileList[i] = (char*)calloc(ubLongestFileName, sizeof(char))) == NULL)
+      {
+        // if it failes
+        Serial.printf("Unable to allocate any more memory. Only space for %d/%d \n", i, ubNumberOfFiles);
+
+        // work with most possible number of files
+        ubNumberOfFiles = i-1;
+
+        break;
+      }
+      */
+    }
+
+    // pointer to file list/array
+    char** ppcFileList = pcFileList;
+
+    Serial.printf("Filling the allocated array with %d file names\n", ubNumberOfFiles);
+    SaveCrashSpiffs.getFileList(theDirectory, ppcFileList, ubNumberOfFiles);
+
+    Serial.printf("List of files in directory '%s'\n", theDirectory);
+    for (uint8_t i = 0; i < ubNumberOfFiles; i++)
+    {
+      Serial.printf("#%d: %s\n", i+1, ppcFileList[i]);
+    }
+
+    // file list should be free'd at the end
+    for (i = 0; i < ubNumberOfFiles; i++)
+    {
+      free(pcFileList[i]);
+    }
+  }
+  else
+  {
+    // in case not enough RAM is available to calloc the whole file size
+    char* _errorContent = (char*)calloc(255, sizeof(char));
+
+    // print error message in case of not enought RAM for this file
+    sprintf(_errorContent, "Error reading file list to buffer. %d byte of RAM is not enough to read %d byte of file list content", _ulFreeHeap, _ulRequiredHeap);
+
+    // print error message in case of not enought RAM
+    Serial.println(_errorContent);
+
+    // free the allocated space
+    free(_errorContent);
+  }
 }
 
 /**
